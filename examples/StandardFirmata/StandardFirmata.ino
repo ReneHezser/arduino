@@ -26,6 +26,8 @@
 #include <Servo.h>
 #include <Wire.h>
 #include <Firmata.h>
+#include <TimerOne.h>
+#include <MultiFuncShield.h>
 
 #define I2C_WRITE                   B00000000
 #define I2C_READ                    B00001000
@@ -42,6 +44,10 @@
 // the minimum interval for sampling analog input
 #define MINIMUM_SAMPLING_INTERVAL   1
 
+// Multi-function Shield shift register pins used for seven segment display
+#define LATCH_DIO 4
+#define CLK_DIO 7
+#define DATA_DIO 8
 
 /*==============================================================================
  * GLOBAL VARIABLES
@@ -693,6 +699,9 @@ void sysexCallback(byte command, byte argc, byte *argv)
       serialFeature.handleSysex(command, argc, argv);
 #endif
       break;
+    case 0x72: // write to the 7-segment display on a Multi-function Shield (HCARDU0085)
+      writeLed(argc, argv);
+      break;
   }
 }
 
@@ -722,6 +731,11 @@ void systemResetCallback()
   }
 
   for (byte i = 0; i < TOTAL_PINS; i++) {
+    // ignore Multi-function Shield pins
+    if (PIN_TO_DIGITAL(i) == LATCH_DIO || PIN_TO_DIGITAL(i) == CLK_DIO || PIN_TO_DIGITAL(i) == DATA_DIO) {
+      continue;
+    }
+
     // pins with analog capability default to analog input
     // otherwise, pins default to digital output
     if (IS_PIN_ANALOG(i)) {
@@ -750,6 +764,8 @@ void systemResetCallback()
   }
   */
   isResetting = false;
+
+  initializeMultiFunctionShield();
 }
 
 void setup()
@@ -820,4 +836,26 @@ void loop()
 #ifdef FIRMATA_SERIAL_FEATURE
   serialFeature.update();
 #endif
+}
+
+void initializeMultiFunctionShield() {
+  Timer1.initialize();
+  // initialize multi-function shield library
+  MFS.initialize(&Timer1);
+  MFS.write("Init");
+  delay(250);
+  MFS.write("");
+}
+
+void writeLed(byte argc, byte *argv) {
+  if (argc == NULL)
+    return;
+
+  char displayText[5] = {' ',' ',' ',' ',0};
+  for (int i = 0; i<argc; i++)
+  {
+    // get ascii and convert
+    displayText[i] = argv[i];
+  }
+  MFS.write(displayText, 1);
 }
